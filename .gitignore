@@ -1,0 +1,26 @@
+# Dependencias
+node_modules/
+jspm_packages/
+
+dist/
+build/
+
+# --- Entorno y Secretos ---
+.env
+.env.test
+.env.production
+*.local
+
+# --- Logs y Temporales ---
+logs/
+*.log
+npm-debug.log*
+
+# --- Base de Datos y Backups ---
+backups/*.sql
+
+# --- Multimedia y Sistema ---
+uploads/
+
+Thumbs.db
+.vscode/
