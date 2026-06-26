@@ -31,6 +31,10 @@ router.get('/download-report/:sessionId', requireAuth, asyncHandler(async (req, 
                 lte: session.closedAt || new Date(),
             },
         },
+        include: {
+            items: true,       // Incluir los productos de la venta
+            salePayments: true // Incluir los pagos para calcular el saldo
+        },
     });
 
     const expenses = await prisma.expense.findMany({

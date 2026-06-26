@@ -120,6 +120,57 @@ const ReportService = {
         currentY += 15;
       }
 
+      // --- TABLA DE SEPARADOS Y CRÉDITOS ---
+      currentY += 20;
+      doc.fillColor("#000000").fontSize(11).font("Helvetica-Bold").text("RESUMEN DE SEPARADOS Y CRÉDITOS", 50, currentY);
+      currentY += 20;
+
+      const layawaySales = sales.filter(s => {
+        let details = s.payment_details || {};
+        if (typeof details === 'string') {
+          try { details = JSON.parse(details); } catch (e) { details = {}; }
+        }
+        return details.isLayaway || details.isCredit;
+      });
+
+      if (layawaySales.length > 0) {
+        doc.fillColor("#f0f0f0").rect(50, currentY, 500, 20).fill();
+        doc.fillColor("#000000").fontSize(9).text("CLIENTE", 60, currentY + 6);
+        doc.text("PRODUCTOS", 200, currentY + 6);
+        doc.text("SALDO PENDIENTE", 450, currentY + 6, { align: "right", width: 90 });
+        currentY += 25;
+        doc.font("Helvetica").fontSize(8);
+
+        layawaySales.forEach(s => {
+          if (currentY > 720) { doc.addPage(); currentY = 50; }
+          const totalPaid = (s.salePayments || []).reduce((sum, p) => sum + Number(p.amount), 0);
+          const balance = Number(s.totalAmount) - totalPaid;
+          
+          // No mostrar si el saldo es cero o menos
+          if (balance <= 0) return;
+
+          const productNames = (s.items || []).map(item => `${item.product_name} (x${item.quantity})`).join(', ');
+
+          doc.fillColor("#333333").text(s.customerName.substring(0, 20), 60, currentY, { width: 130 });
+          doc.text(productNames.substring(0, 40), 200, currentY, { width: 240 });
+          doc.fillColor("#e74c3c").font("Helvetica-Bold").text(fmt(balance), 450, currentY, { align: "right", width: 90 });
+          
+          // Reset font for next row
+          doc.font("Helvetica").fillColor("#333333");
+
+          currentY += 20;
+          doc.moveTo(50, currentY - 5).lineTo(550, currentY - 5).lineWidth(0.5).strokeColor("#dddddd").stroke();
+        });
+
+        if (doc.y === currentY) { // Si no se añadió ninguna fila porque todas estaban pagadas
+            doc.fillColor("#999").text("No se generaron nuevas cuentas por cobrar en esta sesión.", 60, currentY);
+            currentY += 15;
+        }
+      } else {
+        doc.fillColor("#999").text("No se registraron separados o créditos en esta sesión.", 60, currentY);
+        currentY += 15;
+      }
+
       // --- PIE DE PÁGINA Y FIRMAS ---
       currentY = 720;
       doc.moveTo(50, currentY).lineTo(200, currentY).lineWidth(1).strokeColor("#999").stroke();
