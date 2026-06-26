@@ -1,8 +1,8 @@
 /**
  * WINNER STORE - Módulo de Control de Caja (Arqueo)
- * Integra la lógica de turnos con el panel administrativo.
  */
 
+// eslint-disable-next-line no-unused-vars
 const CASH_STORAGE_KEY = 'winner_cash_sessions';
 let currentSession = null;
 
@@ -12,23 +12,30 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initCashModule() {
-    loadSession();
-    updateCashUI();
-    renderCashHistory();
+    loadActiveSession();
+    renderCashHistory(); // Esto también actualizará la UI
 }
 
-function loadSession() {
-    const sessions = JSON.parse(localStorage.getItem(CASH_STORAGE_KEY) || '[]');
-    window.currentCashSession = sessions.find(s => s.status === 'open') || null;
+async function loadActiveSession() {
+    try {
+        const res = await window.apiFetch('/api/sessions/active');
+        const session = await res.json();
+        window.currentCashSession = session; // Puede ser null si no hay sesión abierta
+    } catch (error) {
+        console.error("Error al cargar la sesión activa:", error);
+        window.currentCashSession = null;
+    }
     currentSession = window.currentCashSession;
+    updateCashUI();
 }
 
-function saveSessions(sessions) {
-    localStorage.setItem(CASH_STORAGE_KEY, JSON.stringify(sessions));
+// Esta función ya no es necesaria, los datos se guardan en el backend.
+// eslint-disable-next-line no-unused-vars
+function saveSessions() {
+    // localStorage.setItem(CASH_STORAGE_KEY, JSON.stringify(sessions));
 }
 
 function updateCashUI() {
-    loadSession(); // Recargar para asegurar el estado más reciente
     const isOpen = !!window.currentCashSession;
     
     // Elementos Globales (Mini Badge)
@@ -42,7 +49,7 @@ function updateCashUI() {
     const kpiNetCash = document.getElementById('kpiNetCash');
     if (kpiNetCash) {
         const sessionSales = calculateSalesInSession(window.currentCashSession);
-        const totalNet = isOpen ? (window.currentCashSession.baseAmount + sessionSales.cash) : 0;
+        const totalNet = isOpen ? (Number(window.currentCashSession.initialBalance) + sessionSales.cash) : 0;
         kpiNetCash.textContent = fmt(totalNet);
         
         // Indicador de "CAJA ABIERTA" en el Dashboard
@@ -71,14 +78,14 @@ function updateCashUI() {
         details.style.display = isOpen ? 'grid' : 'none';
 
         if (isOpen) {
-            document.getElementById('sessionStartTime').textContent = new Date(window.currentCashSession.startTime).toLocaleTimeString();
-            document.getElementById('sessionBaseAmount').textContent = formatMoney(window.currentCashSession.baseAmount);
+            document.getElementById('sessionStartTime').textContent = new Date(window.currentCashSession.openedAt).toLocaleTimeString();
+            document.getElementById('sessionBaseAmount').textContent = formatMoney(window.currentCashSession.initialBalance);
             
             // Calcular ventas del turno reales usando la data global de ventas
             const sessionSales = calculateSalesInSession(window.currentCashSession);
             document.getElementById('sessionCashSales').textContent = formatMoney(sessionSales.cash);
             
-            const totalNet = window.currentCashSession.baseAmount + sessionSales.cash;
+            const totalNet = Number(window.currentCashSession.initialBalance) + sessionSales.cash;
             document.getElementById('sessionTotalNet').textContent = formatMoney(totalNet);
         }
     }
@@ -96,26 +103,29 @@ function closeCashModal() {
 }
 
 // eslint-disable-next-line no-unused-vars
-function confirmOpenCash() {
-    const base = parseFloat(document.getElementById('cashBaseInput').value) || 0;
-    const newSession = {
-        id: Date.now(),
-        startTime: new Date().toISOString(),
-        endTime: null,
-        baseAmount: base,
-        status: 'open',
-        admin: 'Admin'
-    };
+async function confirmOpenCash() {
+    const baseAmount = parseFloat(document.getElementById('cashBaseInput').value) || 0;
 
-    const sessions = JSON.parse(localStorage.getItem(CASH_STORAGE_KEY) || '[]');
-    sessions.push(newSession);
-    saveSessions(sessions);
-    currentSession = newSession;
-    
-    closeCashModal();
-    updateCashUI();
-    if(typeof toast === 'function') toast("Turno de caja iniciado");
-    renderCashHistory();
+    try {
+        const res = await window.apiFetch('/api/sessions/open', {
+            method: 'POST',
+            body: JSON.stringify({ baseAmount }),
+        });
+        const newSession = await res.json();
+
+        if (!res.ok) throw new Error(newSession.error || 'No se pudo abrir la caja.');
+
+        currentSession = newSession;
+        window.currentCashSession = newSession;
+        
+        closeCashModal();
+        updateCashUI();
+        if(typeof toast === 'function') toast("Turno de caja iniciado");
+        renderCashHistory();
+    } catch (error) {
+        console.error("Error al abrir caja:", error);
+        if(typeof toast === 'function') toast(`❌ Error: ${error.message}`);
+    }
 }
 
 // eslint-disable-next-line no-unused-vars
@@ -123,12 +133,12 @@ function closeCashArqueo() {
     const sales = calculateSalesInSession(currentSession);
     const summaryDiv = document.getElementById('arqueoSummary');
     
-    summaryDiv.innerHTML = `
-        <div class="arqueo-row"><label>Monto Base:</label><span>${formatMoney(currentSession.baseAmount)}</span></div>
+    if(summaryDiv) summaryDiv.innerHTML = `
+        <div class="arqueo-row"><label>Monto Base:</label><span>${formatMoney(currentSession.initialBalance)}</span></div>
         <div class="arqueo-row"><label>Ventas Efectivo:</label><span>${formatMoney(sales.cash)}</span></div>
         <div class="arqueo-row"><label>Ventas Tarjeta:</label><span>${formatMoney(sales.card)}</span></div>
         <div class="arqueo-row"><label>Otros Métodos:</label><span>${formatMoney(sales.other)}</span></div>
-        <div class="arqueo-row total"><label>Efectivo Total:</label><span>${formatMoney(currentSession.baseAmount + sales.cash)}</span></div>
+        <div class="arqueo-row total"><label>Efectivo Total:</label><span>${formatMoney(Number(currentSession.initialBalance) + sales.cash)}</span></div>
     `;
 
     document.getElementById('cashCloseModal').classList.add('open');
@@ -142,42 +152,57 @@ function closeCashArqueoModal() {
 
 // eslint-disable-next-line no-unused-vars
 async function confirmCloseCash() {
-    const sessions = JSON.parse(localStorage.getItem(CASH_STORAGE_KEY) || '[]');
     const sessionToClose = currentSession || window.currentCashSession;
     if (!sessionToClose) return;
 
-    const idx = sessions.findIndex(s => s.id === sessionToClose.id);
     const shouldEmail = document.getElementById('sendEmailArqueo')?.checked;
     const shouldPrint = document.getElementById('printArqueo')?.checked;
     const shouldDownload = document.getElementById('downloadPdfArqueo')?.checked;
     
-    if (idx !== -1) {
-        sessions[idx].status = 'closed';
-        sessions[idx].endTime = new Date().toISOString();
-        saveSessions(sessions);
+    // SOLUCIÓN: Recolectar los datos del arqueo para enviarlos al backend.
+    const salesInSession = calculateSalesInSession(sessionToClose);
+    const realBalance = parseFloat(document.getElementById('realBalanceInput')?.value || '0');
+    const initialBalance = Number(sessionToClose.initialBalance);
+    const theoreticalBalance = initialBalance + salesInSession.cash;
+    const difference = realBalance - theoreticalBalance;
 
-        // SOLUCIÓN: Lógica de descarga y envío de email separada y corregida.
+    try {
+        const res = await window.apiFetch(`/api/sessions/close/${sessionToClose.id}`, {
+            method: 'POST',
+            body: JSON.stringify({ 
+                realBalance,
+                theoreticalSales: salesInSession.cash, // Solo efectivo cuenta para el arqueo
+                theoreticalExpenses: 0, // Placeholder para futuros gastos
+                difference,
+            }),
+        });
+        const closedSession = await res.json();
+
+        if (!res.ok) throw new Error(closedSession.error || 'No se pudo cerrar la caja.');
+
+        // La sesión se cerró en el backend, ahora disparamos las acciones del frontend.
         if (shouldDownload) {
-            // Llama directamente al nuevo endpoint de descarga.
-            // El navegador se encargará de descargar el archivo.
-            window.open(`/api/arqueo/download-report/${sessionToClose.id}`);
+            window.open(`/api/arqueo/download-report/${closedSession.id}`);
             toast("📄 Iniciando descarga del reporte...");
         }
         if (shouldEmail && typeof window.handleSendDailyReport === 'function') {
-            // La función original ahora solo se encarga de enviar el email.
-            await window.handleSendDailyReport(sessionToClose.id);
+            await window.handleSendDailyReport(closedSession.id);
         }
         if (shouldPrint) {
-            // Placeholder para la lógica de impresión térmica
             toast("🖨️ Comprobante de cierre generado.");
         }
-    }
 
-    currentSession = null;
-    closeCashArqueoModal();
-    updateCashUI();
-    if(typeof toast === 'function') toast("Caja cerrada exitosamente");
-    renderCashHistory();
+        currentSession = null;
+        window.currentCashSession = null;
+        closeCashArqueoModal();
+        updateCashUI();
+        if(typeof toast === 'function') toast("Caja cerrada exitosamente");
+        renderCashHistory();
+
+    } catch (error) {
+        console.error("Error al cerrar caja:", error);
+        if(typeof toast === 'function') toast(`❌ Error: ${error.message}`);
+    }
 }
 
 /**
@@ -185,8 +210,8 @@ async function confirmCloseCash() {
  */
 function clearCashHistory() {
     if (confirm("¿Estás seguro de que quieres borrar TODO el historial de caja? Esta acción no se puede deshacer.")) {
-        localStorage.removeItem(CASH_STORAGE_KEY);
-        loadSession(); // Recargar para limpiar la sesión actual en memoria
+        // Aquí deberías llamar a un endpoint del backend para borrar el historial
+        // Por ahora, solo limpiamos la UI
         updateCashUI();
         renderCashHistory();
         if(typeof toast === 'function') toast("🧹 Historial de caja limpiado.");
@@ -197,27 +222,38 @@ window.clearCashHistory = clearCashHistory;
 function calculateSalesInSession(session) {
     if (!session || !window.salesLog || !Array.isArray(window.salesLog)) return { cash: 0, card: 0, other: 0 };
     
-    const start = new Date(session.startTime).getTime();
-    const end = session.endTime ? new Date(session.endTime).getTime() : Date.now();
+    const start = new Date(session.openedAt).getTime();
+    const end = session.closedAt ? new Date(session.closedAt).getTime() : Date.now();
 
     return window.salesLog.reduce((acc, sale) => {
         const saleTime = new Date(sale.timestamp || sale.createdAt).getTime();
         if (isNaN(saleTime)) return acc;
         
-        // Solo sumamos ventas físicas realizadas durante el tiempo del turno
+        // Sumar ventas físicas realizadas durante el turno
         if (saleTime >= start && saleTime <= end && sale.channel === 'fisica') {
             const method = (sale.method || sale.payment_method || "").toLowerCase();
             const amount = Number(sale.total) || 0;
-            if (method.includes("efectivo")) acc.cash += amount;
-            else if (method.includes("tarjeta")) acc.card += amount;
-            else acc.other += amount;
+
+            // SOLUCIÓN: Contabilizar correctamente abonos y pagos completos.
+            if (sale.payment_status === 'completed' && method.includes("efectivo")) {
+                acc.cash += amount;
+            } else if (sale.payment_status === 'partial') {
+                const details = typeof sale.payment_details === 'string' ? JSON.parse(sale.payment_details || '{}') : (sale.payment_details || {});
+                if (details.abonoAmount > 0 && method.includes("efectivo")) {
+                    acc.cash += Number(details.abonoAmount);
+                }
+            } else if (method.includes("tarjeta")) {
+                acc.card += amount;
+            } else { acc.other += amount; }
         }
         return acc;
     }, { cash: 0, card: 0, other: 0 });
 }
 
-function renderCashHistory() {
-    const sessions = JSON.parse(localStorage.getItem(CASH_STORAGE_KEY) || '[]').reverse();
+async function renderCashHistory() {
+    const res = await window.apiFetch('/api/sessions/history');
+    const sessions = await res.json();
+
     const body = document.getElementById('cashHistoryBody');
     if (!body) return;
 
@@ -228,13 +264,13 @@ function renderCashHistory() {
 
     body.innerHTML = sessions.map(s => `
         <tr>
-            <td style="font-size:11px">${new Date(s.startTime).toLocaleDateString()}</td>
-            <td>${new Date(s.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
-            <td>${s.endTime ? new Date(s.endTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--'}</td>
-            <td>${fmt(s.baseAmount)}</td>
+            <td style="font-size:11px">${new Date(s.openedAt).toLocaleDateString()}</td>
+            <td>${new Date(s.openedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
+            <td>${s.closedAt ? new Date(s.closedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--'}</td>
+            <td>${fmt(s.initialBalance)}</td>
             <td style="color:var(--green)">${fmt(calculateSalesInSession(s).cash)}</td>
             <td style="font-weight:700; color:var(--accent)">
-                ${fmt(s.baseAmount + calculateSalesInSession(s).cash)}
+                ${fmt(Number(s.initialBalance) + calculateSalesInSession(s).cash)}
             </td>
             <td><span class="status-pill ${s.status}">${s.status}</span></td>
         </tr>

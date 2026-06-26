@@ -1,64 +1,85 @@
 "use strict";
 
-const express = require("express");
-const asyncHandler = require("../utils/asyncHandler");
-const { requireAuth } = require("../middlewares/auth");
-const { requireAdminIp } = require("../middlewares/securityMiddleware");
-const { prisma } = require("../database");
-const logger = require("../utils/logger");
-
+const express = require('express');
 const router = express.Router();
+const { requireAuth } = require('../middlewares/auth');
+const asyncHandler = require('../utils/asyncHandler');
+const { prisma } = require('../database');
 
-// GET /api/admin/sessions - List all active sessions
-router.get("/admin/sessions", requireAuth, requireAdminIp, asyncHandler(async (req, res) => {
-  const sessions = await prisma.activeSession.findMany({
-    where: { isActive: true },
-    include: {
-      user: {
-        select: { username: true, email: true, role: true }
-      }
-    },
-    orderBy: { lastActivity: 'desc' }
-  });
-
-  res.json(sessions.map(session => ({
-    id: session.id,
-    username: session.user.username,
-    email: session.user.email,
-    role: session.user.role,
-    ipAddress: session.ipAddress,
-    userAgent: session.userAgent,
-    loginTime: session.loginTime,
-    lastActivity: session.lastActivity,
-  })));
+/**
+ * Obtiene la sesión de caja activa actual.
+ */
+router.get('/sessions/active', requireAuth, asyncHandler(async (req, res) => {
+    const activeSession = await prisma.cashSession.findFirst({
+        where: { status: 'open' },
+    });
+    res.json(activeSession);
 }));
 
-// DELETE /api/admin/sessions/:id - Revoke a specific session
-router.delete("/admin/sessions/:id", requireAuth, requireAdminIp, asyncHandler(async (req, res) => {
-  const { id } = req.params;
-
-  await prisma.activeSession.update({
-    where: { id: id },
-    data: { isActive: false },
-  });
-
-  logger.info(`🛡️ Sesión ${id} revocada por ${req.user.user} desde IP: ${req.ip}`);
-  res.json({ success: true, message: "Sesión revocada con éxito." });
+/**
+ * Obtiene el historial de todas las sesiones de caja.
+ */
+router.get('/sessions/history', requireAuth, asyncHandler(async (req, res) => {
+    const sessions = await prisma.cashSession.findMany({
+        orderBy: { openedAt: 'desc' },
+    });
+    res.json(sessions);
 }));
 
-// GET /api/admin/banned-ips - Lista de IPs bloqueadas permanentemente
-router.get("/admin/banned-ips", requireAuth, requireAdminIp, asyncHandler(async (req, res) => {
-  const bans = await prisma.bannedIp.findMany({
-    orderBy: { createdAt: 'desc' }
-  });
-  res.json(bans);
+/**
+ * Abre una nueva sesión de caja.
+ */
+router.post('/sessions/open', requireAuth, asyncHandler(async (req, res) => {
+    const { baseAmount } = req.body;
+    // SOLUCIÓN: El frontend envía el nombre de usuario en la propiedad 'user', no 'username'.
+    // Se añade un fallback por seguridad.
+    const openedBy = req.user.user || req.user.username || 'Admin';
+
+    const existingOpenSession = await prisma.cashSession.findFirst({
+        where: { status: 'open' },
+    });
+
+    if (existingOpenSession) {
+        return res.status(400).json({ error: 'Ya existe una sesión de caja abierta.' });
+    }
+
+    const newSession = await prisma.cashSession.create({
+        data: {
+            // SOLUCIÓN: Generar un ID único para la sesión.
+            id: `CS-${Date.now()}`,
+            openedBy,
+            openedAt: new Date(),
+            initialBalance: baseAmount,
+            status: 'open',
+        },
+    });
+
+    res.status(201).json(newSession);
 }));
 
-// DELETE /api/admin/banned-ips/:id - Desbloquear IP manualmente
-router.delete("/admin/banned-ips/:id", requireAuth, requireAdminIp, asyncHandler(async (req, res) => {
-  await prisma.bannedIp.delete({ where: { id: req.params.id } });
-  logger.info(`🔓 IP desbloqueada por administrador: ${req.user.user}`);
-  res.json({ success: true });
+/**
+ * Cierra una sesión de caja existente.
+ */
+router.post('/sessions/close/:id', requireAuth, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { realBalance, theoreticalSales, theoreticalExpenses } = req.body;
+
+    const closedSession = await prisma.cashSession.update({
+        where: { id },
+        data: {
+            status: 'closed',
+            closedAt: new Date(),
+            closedBy: req.user.username,
+            realBalance,
+            theoreticalSales,
+            theoreticalExpenses,
+            // La diferencia se puede calcular aquí o en el frontend.
+            // Por simplicidad, asumimos que el frontend la envía.
+            difference: realBalance - (theoreticalSales - theoreticalExpenses),
+        },
+    });
+
+    res.json(closedSession);
 }));
 
 module.exports = router;

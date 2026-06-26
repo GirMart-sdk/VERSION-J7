@@ -207,6 +207,7 @@ app.post("/api/admin/reset-data", requireAuth, requireAdminIp, async (req, res, 
 });
 
 app.use("/api", require("./routes/sessions")); // New sessions routes
+app.use("/api", require("./routes/sessions")); // New sessions routes
 
 // 4. Seguridad de archivos sensibles
 const BLOCKED_PATTERNS = [

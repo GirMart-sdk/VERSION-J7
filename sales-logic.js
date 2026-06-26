@@ -5,6 +5,7 @@
  
 window.salesCharts = {};
  
+
 async function fetchSalesLog() {
   try {
     const res = await apiFetch(`${API_URL}/sales`);
@@ -16,6 +17,7 @@ async function fetchSalesLog() {
  
     renderSalesKPIs();
     renderSalesCharts();
+    renderTopProductsChart(); // <-- AÑADIDO: Llamar a la nueva función del gráfico
     renderSalesTable();
     
     // Notificar al módulo de caja que los datos de ventas han cambiado
@@ -136,6 +138,47 @@ function renderSalesCharts() {
   }
 }
 
+/**
+ * Renderiza el gráfico de los productos más vendidos.
+ */
+async function renderTopProductsChart() {
+  const container = $("chartTopProducts");
+  if (!container) return;
+
+  try {
+    const res = await apiFetch(`${API_URL}/analytics/top-products?limit=5`);
+    const topProducts = await res.json();
+
+    if (!topProducts || topProducts.length === 0) {
+      container.innerHTML = '<div class="ls-empty" style="padding-top: 40px;">No hay datos de ventas para mostrar el ranking.</div>';
+      return;
+    }
+
+    // Extraer etiquetas (nombres) y datos (cantidades)
+    const labels = topProducts.map(p => p.product_name);
+    const data = topProducts.map(p => p._sum.quantity);
+
+    // Crear un canvas para Chart.js
+    container.innerHTML = '<canvas id="topProductsChartCanvas"></canvas>';
+    const ctx = $('topProductsChartCanvas').getContext('2d');
+
+    // Destruir gráfico anterior si existe
+    if (window.salesCharts.topProducts) {
+      window.salesCharts.topProducts.destroy();
+    }
+
+    // Renderizar el nuevo gráfico de barras horizontales
+    window.salesCharts.topProducts = new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets: [{ label: 'Unidades Vendidas', data, backgroundColor: '#e8ff47' }] },
+      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+  } catch (error) {
+    console.error("Error al renderizar el ranking de productos:", error);
+    container.innerHTML = '<div class="ls-empty" style="padding-top: 40px;">Error al cargar el ranking.</div>';
+  }
+}
+
 function updateChart(id, type, data) {
   const ctx = $(id)?.getContext("2d");
   if (!ctx) return;
@@ -158,12 +201,12 @@ function updateChart(id, type, data) {
 }
 
 function getSaleTimestamp(s) {
-  const ts =
-    (typeof s?.timestamp === "string" && s.timestamp && s.timestamp) ||
-    (typeof s?.createdAt === "string" && s.createdAt && s.createdAt) ||
-    (s?.timestamp instanceof Date ? s.timestamp.toISOString() : "") ||
-    "";
-  return ts || "";
+  // SOLUCIÓN: Manejar correctamente tanto strings como objetos Date.
+  if (s?.timestamp instanceof Date) return s.timestamp.toISOString();
+  if (s?.createdAt instanceof Date) return s.createdAt.toISOString();
+  if (typeof s?.timestamp === "string") return s.timestamp;
+  if (typeof s?.createdAt === "string") return s.createdAt;
+  return "";
 }
 
 function applyDateFilter(data, from, to) {
@@ -639,5 +682,6 @@ window.openLayawayPayment = async (saleId) => {
 $("applySalesFilters")?.addEventListener("click", () => {
   renderSalesKPIs();
   renderSalesCharts();
+  renderTopProductsChart();
   renderSalesTable();
 });
