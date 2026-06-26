@@ -35,9 +35,12 @@ const PAYMENT_METHODS_CONFIG = [
 ];
 
 async function initPaymentsTab() {
-  // Si no hay datos de ventas cargados, los traemos para poder mostrar el historial
-  if (!window.allSalesData || window.allSalesData.length === 0) {
-    if (typeof window.fetchSalesLog === "function") await window.fetchSalesLog();
+  // [FIX] Asegurarse de que los datos de ventas estén cargados ANTES de renderizar.
+  // Si window.salesLog no existe o está vacío, lo cargamos y esperamos.
+  if (!window.salesLog || window.salesLog.length === 0) {
+    if (typeof window.fetchSalesLog === "function") {
+      await window.fetchSalesLog(); // Esperamos a que los datos lleguen.
+    }
   }
 
   renderPaymentMethodsCards();

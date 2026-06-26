@@ -472,11 +472,25 @@ window.calcCashChange = () => {
   $("posPayCashChange").textContent = window.fmt(Math.max(0, received - target));
 };
 
-window.toggleLayawayFields = () => {
-  $("layawayAmountGroup").style.display = $("posPayIsLayaway").checked
-    ? "block"
-    : "none";
+window.handlePaymentOptionChange = (changedOption) => {
+  const isLayaway = $("posPayIsLayaway");
+  const isCredit = $("posPayIsCredit");
+  const abonoGroup = $("layawayAmountGroup");
+
+  if (changedOption === 'layaway' && isLayaway.checked) {
+    if (isCredit) isCredit.checked = false;
+  } else if (changedOption === 'credit' && isCredit.checked) {
+    if (isLayaway) isLayaway.checked = false;
+  }
+
+  // El campo de abono se muestra para 'separado', pero no para 'crédito'.
+  if (abonoGroup) {
+    abonoGroup.style.display = isLayaway.checked ? "block" : "none";
+  }
 };
+// Para mantener compatibilidad con llamadas antiguas.
+window.toggleLayawayFields = () => window.handlePaymentOptionChange('layaway');
+
 
 async function confirmPOSPaymentWithDetails() {
   const totalRaw = $("posTotal").textContent.replace(/[^0-9-]/g, "");
@@ -485,10 +499,15 @@ async function confirmPOSPaymentWithDetails() {
   if (!posCurrentPaymentMethod) return toast("⚠ Selecciona método de pago");
 
   const isLayaway = $("posPayIsLayaway").checked;
+  const isCredit = $("posPayIsCredit").checked;
   const abonoRaw = $("posPayAbonoAmount").value || "0";
   // Limpiar el valor de puntos o comas para asegurar que sea un número válido
   const abono = parseFloat(abonoRaw.replace(/[.,]/g, "")) || 0;
-  if (isLayaway && abono <= 0) return toast("⚠️ Ingresa el abono");
+  
+  // Si es un separado, requiere abono. Si es crédito, el abono es 0.
+  if (isLayaway && abono <= 0) {
+    return toast("⚠️ Para separar un producto, se requiere un abono inicial.");
+  }
 
   const needsShipping = $("posPayNeedsShipping").checked;
   const confirmBtn = $("posPayConfirmBtn");
@@ -504,7 +523,13 @@ async function confirmPOSPaymentWithDetails() {
   }
 
   // El shippingStatus ahora se usa como "Estado del Separado"
-  let shippingStatus = isLayaway ? "ABONO" : "PENDIENTE";
+  let shippingStatus = "PENDIENTE";
+  if (isLayaway) {
+    shippingStatus = "ABONO";
+  } else if (isCredit) {
+    shippingStatus = "CRÉDITO";
+  }
+
 
   if (needsShipping) {
     shippingAddress = $("posShippingAddress").value.trim();
@@ -522,7 +547,8 @@ async function confirmPOSPaymentWithDetails() {
     // que el backend (Joi) rechaza, como 'tracking_number'.
     const paymentDetails = {
       isLayaway: isLayaway,
-      abonoAmount: Math.round(abono),
+      isCredit: isCredit, // Nuevo flag para identificar ventas a crédito
+      abonoAmount: isCredit ? 0 : Math.round(abono), // El crédito no tiene abono inicial
       received: Math.round(parseFloat($("posPayCashReceived")?.value) || 0),
       shipping_status: shippingStatus,
     };
@@ -539,9 +565,9 @@ async function confirmPOSPaymentWithDetails() {
       client: $("posClient")?.value || "Mostrador",
       customer_email: customerEmail,
       customer_phone: customerPhone || $("posCustomerPhone")?.value.trim() || "", // Aseguramos que se tome de posCustomerPhone si no se llenó en el modal
-      payment_status: isLayaway ? "partial" : "completed",
+      payment_status: (isLayaway || isCredit) ? "partial" : "completed",
       shipping_address:
-        shippingAddress || (isLayaway ? "Apartado en Tienda" : "Venta Directa"),
+        shippingAddress || (isLayaway || isCredit ? "Apartado en Tienda" : "Venta Directa"),
       shipping_carrier: shippingCarrier || "Físico",
       payment_details: paymentDetails,
     };

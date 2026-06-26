@@ -2209,27 +2209,32 @@
               border-radius: 8px;
               margin-bottom: 12px;
             "
-          >
+          > 
             <div
               style="
                 display: flex;
                 align-items: center;
-                gap: 10px;
+                gap: 25px;
                 margin-bottom: 10px;
               "
             >
-              <label class="switch">
-                <input
-                  type="checkbox"
-                  id="posPayIsLayaway"
-                  onchange="toggleLayawayFields()"
-                />
-                <span class="slider round"></span>
-              </label>
-              <span
-                style="font-weight: 600; font-size: 13px; color: var(--orange)"
-                >¿Es un Apartado / Separado?</span
-              >
+              <!-- Opción Separado -->
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <label class="switch">
+                  <input type="checkbox" id="posPayIsLayaway" onchange="window.handlePaymentOptionChange('layaway')"/>
+                  <span class="slider round"></span>
+                </label>
+                <span style="font-weight: 600; font-size: 13px; color: var(--orange)">¿Es un Apartado / Separado?</span>
+              </div>
+
+              <!-- Opción Crédito -->
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <label class="switch">
+                  <input type="checkbox" id="posPayIsCredit" onchange="window.handlePaymentOptionChange('credit')"/>
+                  <span class="slider round"></span>
+                </label>
+                <span style="font-weight: 600; font-size: 13px; color: var(--blue)">¿Es Venta a Crédito?</span>
+              </div>
             </div>
 
             <div id="layawayAmountGroup" style="display: none">

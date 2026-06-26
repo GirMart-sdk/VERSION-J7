@@ -22,6 +22,12 @@ async function fetchSalesLog() {
     if (typeof updateCashUI === 'function') updateCashUI();
 
     if (typeof window.renderLayawaySales === "function") window.renderLayawaySales();
+
+    // [FIX] Notificar a la pestaña de Pagos para que se actualice si está activa.
+    // Esto soluciona el problema de "Cargando transacciones..." infinito.
+    if (window.WinnerApp?.state?.activePage === 'payments' && typeof window.syncAndRenderPayments === 'function') {
+      window.syncAndRenderPayments();
+    }
   } catch (e) {
     console.error("Error fetching sales:", e);
   }
@@ -254,7 +260,7 @@ function renderSalesTable() {
               <tr>
                 <th style="width: 15%;">HORA</th>
                 <th style="width: 15%;">CLIENTE</th>
-                <th style="width: 20%;">CANAL / ESTADO</th>
+                <th style="width: 24%;">CANAL / ESTADO</th>
                 <th style="width: 20%;">MÉTODO</th>
                 <th style="width: 15%;">SALDO</th>
                 <th style="width: 12%;">TOTAL</th>
@@ -477,14 +483,15 @@ window.renderLayawaySales = () => {
   const sort = $("layawaySortSelect")?.value || "newest"; 
 
   let filtered = window.salesLog.filter((s) => {
-    // [FIX] Validar explícitamente que la venta sea un 'separado' (isLayaway).
-    // Esto evita que las ventas directas (contado) aparezcan en esta lista.
+    // [FEAT] La sección ahora muestra tanto 'separados' como 'créditos'.
+    // Es un centro de "Cuentas por Cobrar".
     let details = s.payment_details || {};
     if (typeof details === "string") {
       try { details = JSON.parse(details); } catch (e) { details = {}; }
     }
     
-    if (!details.isLayaway) return false; // Si no es un separado, lo descartamos.
+    // Si no es ni separado ni crédito, lo descartamos.
+    if (!details.isLayaway && !details.isCredit) return false;
 
     const isCompleted = s.payment_status === "completed" || (s.total_paid || 0) >= s.total;
     if (window.layawayFilter === "pending") return !isCompleted;
