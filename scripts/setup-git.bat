@@ -16,7 +16,7 @@ git init
 
 echo [*] Configurando repositorio remoto 'origin'...
 git remote remove origin >nul 2>&1
-git remote add origin https://github.com/GirMart-sdk/VERSION-OFICIAL.git
+git remote add origin https://github.com/GirMart-sdk/VERSION-J7.git
 
 echo [*] Sincronizando todos los archivos...
 :: El parametro -f fuerza la inclusion de los 11 .bat aunque esten en el .gitignore
