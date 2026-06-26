@@ -157,13 +157,19 @@ function updateChart(id, type, data) {
   });
 }
 
+function getSaleTimestamp(s) {
+  const ts =
+    (typeof s?.timestamp === "string" && s.timestamp && s.timestamp) ||
+    (typeof s?.createdAt === "string" && s.createdAt && s.createdAt) ||
+    (s?.timestamp instanceof Date ? s.timestamp.toISOString() : "") ||
+    "";
+  return ts || "";
+}
+
 function applyDateFilter(data, from, to) {
   if (!from && !to) return data;
   return data.filter((s) => {
-    const ts =
-      (typeof s.timestamp === "string" && s.timestamp) ||
-      (typeof s.createdAt === "string" && s.createdAt) ||
-      "";
+    const ts = getSaleTimestamp(s);
     if (!ts) return false;
 
     const day = ts.split("T")[0];
@@ -173,14 +179,7 @@ function applyDateFilter(data, from, to) {
   });
 }
 
-function getSaleTimestamp(s) {
-  const ts =
-    (typeof s?.timestamp === "string" && s.timestamp && s.timestamp) ||
-    (typeof s?.createdAt === "string" && s.createdAt && s.createdAt) ||
-    (s?.timestamp instanceof Date ? s.timestamp.toISOString() : "") ||
-    "";
-  return ts || "";
-}
+
 
 function renderSalesTable() {
   const channel = $("filterChannel")?.value;
@@ -262,7 +261,7 @@ function renderSalesTable() {
                 <th style="width: 15%;">CLIENTE</th>
                 <th style="width: 24%;">CANAL / ESTADO</th>
                 <th style="width: 20%;">MÉTODO</th>
-                <th style="width: 15%;">SALDO</th>
+                <th style="width: 18%;">SALDO</th>
                 <th style="width: 12%;">TOTAL</th>
                 <th></th>
               </tr>
@@ -519,9 +518,15 @@ window.renderLayawaySales = () => {
     .map((s) => {
       const paid = s.total_paid || 0;
       const balance = Math.max(0, s.total - paid);
-      const date = new Date(s.timestamp);
+      const date = new Date(getSaleTimestamp(s));
       const days = Math.floor((new Date() - date) / (1000 * 60 * 60 * 24));
       const isDone = balance <= 0;
+      let details = s.payment_details || {};
+      if (typeof details === "string") {
+        try { details = JSON.parse(details); } catch (e) { details = {}; }
+      }
+      const type = details.isCredit ? 'Crédito' : 'Separado';
+      const typeClass = details.isCredit ? 's-credit' : 's-layaway';
 
       return `
       <tr style="${isDone ? "background: rgba(46, 204, 113, 0.05);" : ""}">
@@ -529,6 +534,9 @@ window.renderLayawaySales = () => {
         <td>
           <div style="font-weight:700">${esc(s.client)} ${isDone ? '<span title="Pago Completo">✅</span>' : ""}</div>
           <div style="font-size:10px; color:var(--gray-text)">${s.id}</div>
+        </td>
+        <td>
+          <span class="status-badge ${typeClass}" style="font-size:10px;">${type}</span>
         </td>
         <td>
           <span class="status-badge ${isDone ? "s-ok" : days > 30 ? "s-out" : "s-ok"}" style="font-size:10px;">
@@ -587,29 +595,35 @@ window.openLayawayPayment = async (saleId) => {
       }
 
       try {
-        const existingDetails = typeof sale.payment_details === "string" ? JSON.parse(sale.payment_details || "{}") : sale.payment_details || {};
+        const existingDetails = typeof sale.payment_details === "string" ? JSON.parse(sale.payment_details || "{}") : (sale.payment_details || {});
+        const newTotalPaid = (sale.total_paid || 0) + Math.round(amount);
+        const isCompleted = newTotalPaid >= sale.total;
+
+        const payload = {
+          total_paid: newTotalPaid,
+          payment_details: {
+            ...existingDetails,
+            last_abono: Number(amount),
+            last_abono_date: new Date().toISOString(),
+          },
+        };
+
+        if (isCompleted) payload.payment_status = 'completed';
 
         const res = await apiFetch(`${API_URL}/sales/${saleId}`, {
           method: "PATCH",
-          body: JSON.stringify({
-            total_paid: (sale.total_paid || 0) + Math.round(amount), // [FIX] Enviar como entero
-            payment_details: {
-              ...existingDetails,
-              last_abono: Number(amount),
-              last_abono_date: new Date().toISOString(),
-            },
-          }),
+          body: JSON.stringify(payload),
         });
         if (res.ok) {
           toast("✅ Abono registrado con éxito.");
-          // Actualización manual del estado local para reflejo inmediato en la UI
-          sale.total_paid = (sale.total_paid || 0) + Number(amount);
-          if (sale.total_paid >= sale.total) {
-            sale.payment_status = "completed";
+          const sale = window.salesLog.find(s => s.id === saleId);
+          if (sale) {
+            sale.total_paid = newTotalPaid;
+            if (isCompleted) sale.payment_status = "completed";
           }
           renderLayawaySales(); // Volver a renderizar la tabla de separados
           window.closePromptModal();
-          // fetchSalesLog(); // Ya no es estrictamente necesario, pero se puede dejar para una sincronización completa
+          // fetchSalesLog(); // Opcional: se puede dejar para una sincronización completa si se desea.
         } else {
           const err = await res.json();
           toast(`❌ Error: ${err.error || "No se pudo registrar el abono."}`);

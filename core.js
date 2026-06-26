@@ -195,8 +195,11 @@ const apiFetch = async (url, options = {}) => {
     headers["X-CSRF-Token"] = window.csrfToken;
   }
 
-  if (window.AUTH_TOKEN)
+  // [FIX] Asegurar que el token de sesión se envíe siempre si existe.
+  // El error 403 ocurría porque en algunos flujos solo se enviaba la API Key, pero no el token de sesión.
+  if (window.AUTH_TOKEN) {
     headers["Authorization"] = `Bearer ${window.AUTH_TOKEN}`;
+  }
 
   return fetch(url, {
     ...options,
