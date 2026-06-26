@@ -60,6 +60,10 @@ function renderSalesKPIs() {
     $("kpiOnlinePercent").innerText = `${onlinePercent.toFixed(0)}%`;
   if ($("kpiPhysicalPercent"))
     $("kpiPhysicalPercent").innerText = `${(100 - onlinePercent).toFixed(0)}%`;
+
+  // SOLUCIÓN: Calcular y renderizar el KPI de deudas pendientes en el dashboard.
+  const pendingAmount = window.salesLog.filter(s => s.payment_status === 'partial').reduce((sum, s) => sum + (s.total - (s.total_paid || 0)), 0);
+  if ($("kpiPendingAmount")) $("kpiPendingAmount").innerText = fmt(pendingAmount);
 }
 
 function renderSalesCharts() {
@@ -633,40 +637,23 @@ window.openLayawayPayment = async (saleId) => {
     "", // Dejar en blanco para que el usuario ingrese el monto.
     async (amountRaw) => { 
       const amount = parseFloat(amountRaw);
-      if (amount === null || isNaN(amount) || Number(amount) <= 0) {
+      if (isNaN(amount) || amount <= 0) {
         return toast("❌ Monto de abono inválido.");
       }
 
       try {
-        const existingDetails = typeof sale.payment_details === "string" ? JSON.parse(sale.payment_details || "{}") : (sale.payment_details || {});
-        const newTotalPaid = (sale.total_paid || 0) + Math.round(amount);
-        const isCompleted = newTotalPaid >= sale.total;
-
-        const payload = {
-          total_paid: newTotalPaid,
-          payment_details: {
-            ...existingDetails,
-            last_abono: Number(amount),
-            last_abono_date: new Date().toISOString(),
-          },
-        };
-
-        if (isCompleted) payload.payment_status = 'completed';
-
-        const res = await apiFetch(`${API_URL}/sales/${saleId}`, {
-          method: "PATCH",
-          body: JSON.stringify(payload),
+        // SOLUCIÓN: Llamar al endpoint dedicado para registrar el abono.
+        // El backend se encargará de crear el registro de pago y actualizar el estado de la venta.
+        const res = await apiFetch(`${API_URL}/deudas/${saleId}/abono`, {
+          method: "POST",
+          body: JSON.stringify({ monto: amount }),
         });
+
         if (res.ok) {
           toast("✅ Abono registrado con éxito.");
-          const sale = window.salesLog.find(s => s.id === saleId);
-          if (sale) {
-            sale.total_paid = newTotalPaid;
-            if (isCompleted) sale.payment_status = "completed";
-          }
-          renderLayawaySales(); // Volver a renderizar la tabla de separados
           window.closePromptModal();
-          // fetchSalesLog(); // Opcional: se puede dejar para una sincronización completa si se desea.
+          // Forzar la recarga de todos los datos para asegurar consistencia total.
+          await fetchSalesLog(); 
         } else {
           const err = await res.json();
           toast(`❌ Error: ${err.error || "No se pudo registrar el abono."}`);

@@ -74,11 +74,12 @@ async function aplicarAbono(id, monto) {
       throw err;
     }
 
-    // 3. Registrar el nuevo abono en la tabla de pagos
+    // 3. Registrar el nuevo abono en la tabla de pagos (SalePayment)
     await tx.salePayment.create({
       data: {
         saleId: id,
         amount: monto,
+        // El método podría venir del frontend, pero "Efectivo" es un default seguro para abonos en tienda.
         method: "Efectivo", // O el método que se reciba del frontend
         notes: "Abono a deuda registrado",
       },

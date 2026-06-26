@@ -83,6 +83,7 @@ const salesRoutes = require("./routes/sales");
 const expensesRoutes = require("./routes/expenses");
 const productsRoutes = require("./routes/products");
 const arqueoRoutes = require("./routes/arqueo");
+const deudasRoutes = require("./routes/deudas");
 const webhookRoutes = require("./routes/webhooks");
 const statsRoutes = require("./routes/stats");
 
@@ -182,6 +183,7 @@ app.use("/api", requireAuth, requireAdminIp);
 app.use("/api", productsRoutes); // Montar productsRoutes directamente bajo /api
 app.use("/api", salesRoutes);
 app.use("/api", expensesRoutes);
+app.use("/api/deudas", deudasRoutes);
 app.use("/api/arqueo", arqueoRoutes); // CORRECCIÓN: Montar bajo /api/arqueo
 app.use("/api", webhookRoutes);
 app.use("/api", statsRoutes);
