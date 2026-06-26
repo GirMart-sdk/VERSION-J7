@@ -1882,7 +1882,7 @@ input:focus {
 }
 
 .data-table td {
-  padding: 11px 14px;
+  padding: 8px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0);
   vertical-align: middle;
 }
@@ -3071,10 +3071,10 @@ input:focus {
   padding-right: 5px;
 }
 .activity-item {
-  padding: 12px;
+  padding: 1px;
   border-bottom: 1px solid var(--border);
   display: flex;
-  gap: 12px;
+  gap: 22px;
   animation: slideInRight 0.4s ease-out;
 }
 .act-icon {

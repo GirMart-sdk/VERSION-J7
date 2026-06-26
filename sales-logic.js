@@ -249,15 +249,15 @@ function renderSalesTable() {
           <span style="color:var(--accent); font-weight:700;">${fmt(g.total)} — ${g.items.length} ventas ▾</span>
         </div>
         <div class="table-wrap hidden" style="border:none">
-          <table class="data-table">
+          <table class="data-table" style="table-layout: fixed; width: 100%;">
             <thead>
               <tr>
-                <th style="width: 80px;">HORA</th>
-                <th>CLIENTE</th>
-                <th style="width: 120px;">CANAL / ESTADO</th>
-                <th style="width: 120px;">MÉTODO</th>
-                <th style="width: 120px;">SALDO</th>
-                <th style="width: 120px;">TOTAL</th>
+                <th style="width: 15%;">HORA</th>
+                <th style="width: 15%;">CLIENTE</th>
+                <th style="width: 20%;">CANAL / ESTADO</th>
+                <th style="width: 20%;">MÉTODO</th>
+                <th style="width: 15%;">SALDO</th>
+                <th style="width: 12%;">TOTAL</th>
                 <th></th>
               </tr>
             </thead>
@@ -284,7 +284,7 @@ function renderSalesTable() {
 
                   return `
                   <tr class="activity-item">
-                    <td style="font-size:11px; white-space:nowrap; color:var(--gray-text)">${time}</td>
+                    <td style="font-size:11px; white-space:nowrap; color:var(--gray-text);">${time}</td>
                     <td>
                       <div style="font-weight:700; color:white; font-size:13px;">${esc(s.client)}</div>
                       <div style="font-size:10px; color:var(--gray-text);">${s.customer_phone || ""}</div>
