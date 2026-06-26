@@ -3,14 +3,17 @@
    ═══════════════════════════════════════════════════════ */
 "use strict";
 
+
+
 window.renderMessagingCenter = function () {
   const container = $("messagingList");
   if (!container) return;
 
-  // Usar salesLog o allSalesData de forma segura
-  const sales = window.salesLog || window.allSalesData || [];
+  // [FIX] Usar la fuente de datos centralizada `window.salesLog` para consistencia.
+  const sales = window.salesLog || [];
 
   if (sales.length === 0) {
+    if (typeof window.fetchSalesLog === "function") window.fetchSalesLog();
     container.innerHTML =
       '<div class="ls-empty">No hay ventas recientes para notificar</div>';
     return;
@@ -45,8 +48,8 @@ window.renderMessagingCenter = function () {
 
   container.innerHTML = filtered
     .map((s) => {
+      // eslint-disable-next-line no-unused-vars
       const phone = (s.customer_phone || s.phone || "").replace(/\D/g, "");
-      const cleanPhone = phone.startsWith("57") ? phone : "57" + phone;
       const displayPhone = (s.customer_phone || s.phone || "").trim();
       const d =
         typeof s.payment_details === "string"
@@ -60,7 +63,7 @@ window.renderMessagingCenter = function () {
             <div style="z-index:1">
                 <div style="font-weight:700; font-size:14px; color:white">${esc(s.client || "Mostrador")}</div>
                 <div style="font-size:11px; color:var(--accent); font-weight:600; margin-top:2px;">📱 ${esc(displayPhone)}</div>
-                <div style="font-size:11px; color:var(--gray-text); margin-top:2px;">Orden #${s.id.slice(-6).toUpperCase()} • ${fmtDate(s.timestamp)}</div>
+                <div style="font-size:11px; color:var(--gray-text); margin-top:2px;">Orden #${s.id.slice(-6).toUpperCase()} • ${window.fmtDate(s.timestamp)}</div>
                 
                 ${balance > 0 ? `<div style="font-size:12px; color:var(--orange); font-weight:700; margin-top:5px;">SALDO: ${fmt(balance)}</div>` : ""}
 
@@ -94,19 +97,22 @@ window.sendWSMessage = function (saleId, type) {
   const baseUrl = window.location.origin;
 
   switch (type) {
-    case "ticket":
+    case "ticket": {
       message = `¡Hola ${s.client}! 👋 Gracias por elegir W●NNER STREETWEAR. Aquí puedes ver tu comprobante de compra: ${baseUrl}/api/receipt/${s.id}`;
       break;
-    case "shipping":
+    }
+    case "shipping": {
       const carrier =
         s.shipping_carrier || d.shippingCarrier || "la transportadora";
       message = `¡Buenas noticias ${s.client}! 🚀 Tu pedido ya fue despachado.\n\n📦 *Transportadora:* ${carrier}\n🔢 *Guía:* ${d.tracking_number || "Pendiente"}\n\n¡Gracias por tu confianza!`;
       break;
-    case "payment":
+    }
+    case "payment": {
       const paid = Number(s.total_paid || 0);
       const balance = Number(s.total || 0) - paid;
-      message = `Hola ${s.client} 👋, te saludamos de W●NNER. Te recordamos que tienes un saldo pendiente de *${fmt(balance)}* por tu compra del ${fmtDate(s.timestamp)}. ¿Cómo vas con eso?`;
+      message = `Hola ${s.client} 👋, te saludamos de W●NNER. Te recordamos que tienes un saldo pendiente de *${fmt(balance)}* por tu compra del ${window.fmtDate(s.timestamp)}. ¿Cómo vas con eso?`;
       break;
+    }
   }
 
   // ACTUALIZACIÓN: Flujo sin redirección (Requiere WhatsApp Business API)
@@ -122,6 +128,7 @@ window.sendWSMessage = function (saleId, type) {
   window.open(waUrl, "_blank");
 };
 
-window.setMsgFilter = function (val) {
+// eslint-disable-next-line no-unused-vars
+window.setMsgFilter = function (_val) {
   window.renderMessagingCenter();
 };

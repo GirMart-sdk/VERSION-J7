@@ -11,7 +11,7 @@ window.openExpenseModal = function (id = null) {
 
   // Limpiar campos para nuevo gasto
   document.getElementById("expenseId").value = id || "";
-  document.getElementById("expenseDate").value = getTodayStr();
+  document.getElementById("expenseDate").value = window.getTodayStr();
   document.getElementById("expenseConcept").value = "";
   document.getElementById("expenseDetail").value = "";
   document.getElementById("expenseAmount").value = "";
@@ -58,14 +58,16 @@ document.addEventListener("DOMContentLoaded", () => {
         saveBtn.disabled = true;
         saveBtn.textContent = "Guardando...";
 
-        const res = await apiFetch(`${API_URL}/expenses`, {
+        // [FIX] Usar apiFetch para incluir automáticamente headers de Auth y CSRF.
+        const res = await apiFetch(`${window.API_URL}/expenses`, {
           method: "POST",
           body: JSON.stringify(data),
         });
 
         if (res.ok) {
           toast("✅ Gasto registrado correctamente");
-          closeExpenseModal();
+          window.closeExpenseModal();
+          // eslint-disable-next-line no-undef
           if (typeof initExpensesTab === "function") initExpensesTab();
         } else {
           const err = await res.json();
@@ -89,16 +91,16 @@ window.initExpensesTab = async function () {
   try {
     // Peticiones paralelas para optimizar velocidad
     const [summary, weekly, category, list] = await Promise.all([
-      apiFetch(`${API_URL}/expenses/summary?month=${month}`).then((r) =>
+      fetch(`${window.API_URL}/expenses/summary?month=${month}`).then((r) =>
         r.json(),
       ),
-      apiFetch(`${API_URL}/expenses/weekly?month=${month}`).then((r) =>
+      fetch(`${window.API_URL}/expenses/weekly?month=${month}`).then((r) =>
         r.json(),
       ),
-      apiFetch(`${API_URL}/expenses/by-category?month=${month}`).then((r) =>
+      fetch(`${window.API_URL}/expenses/by-category?month=${month}`).then((r) =>
         r.json(),
       ),
-      apiFetch(`${API_URL}/expenses?month=${month}`).then((r) => r.json()),
+      fetch(`${window.API_URL}/expenses?month=${month}`).then((r) => r.json()),
     ]);
 
     renderExpensesKPIs(summary, month);
@@ -258,7 +260,8 @@ function renderExpensesTables(list) {
 window.deleteExpense = async function (id) {
   if (!confirm("¿Eliminar este registro de gasto?")) return;
   try {
-    const res = await apiFetch(`${API_URL}/expenses/${id}`, {
+    // [FIX] Usar apiFetch para incluir automáticamente headers de Auth y CSRF.
+    const res = await apiFetch(`${window.API_URL}/expenses/${id}`, {
       method: "DELETE",
     });
     if (res.ok) {

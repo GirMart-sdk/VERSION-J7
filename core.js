@@ -121,6 +121,68 @@ function toast(msg, duration = 2800) {
 }
 window.toast = toast;
 
+/**
+ * Abre un modal genérico para solicitar datos al usuario, reemplazando a window.prompt().
+ * @param {string} title - Título del modal.
+ * @param {string} text - Texto descriptivo para el usuario.
+ * @param {string} initialValue - Valor inicial del campo de entrada.
+ * @param {function} onConfirm - Callback que se ejecuta con el valor ingresado.
+ */
+window.openPromptModal = function (title, text, initialValue, onConfirm) {
+  let modal = $("promptModal");
+  let overlay = $("promptModalOverlay");
+
+  // Si el modal no existe en el DOM, lo creamos dinámicamente.
+  if (!modal) {
+    overlay = document.createElement("div");
+    overlay.id = "promptModalOverlay";
+    overlay.className = "modal-overlay";
+
+    modal = document.createElement("div");
+    modal.id = "promptModal";
+    modal.className = "modal";
+    modal.style.maxWidth = "450px";
+    modal.innerHTML = `
+      <div class="modal-header">
+        <h3 id="promptModalTitle"></h3>
+        <button class="modal-close" onclick="window.closePromptModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="promptModalText" style="margin-bottom: 15px; font-size: 14px;"></p>
+        <input type="text" id="promptModalInput" class="tb-input" style="width: 100%;">
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" onclick="window.closePromptModal()">Cancelar</button>
+        <button id="promptModalConfirmBtn" class="btn-accent">Confirmar</button>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(modal);
+  }
+
+  // Ahora que estamos seguros de que los elementos existen, los poblamos.
+  const titleEl = $("promptModalTitle");
+  const textEl = $("promptModalText");
+  const inputEl = $("promptModalInput");
+  const confirmBtnEl = $("promptModalConfirmBtn");
+
+  if (titleEl) titleEl.textContent = title;
+  if (textEl) textEl.textContent = text;
+  if (inputEl) {
+    inputEl.value = initialValue;
+    inputEl.focus();
+  }
+
+  // Asignamos el evento de confirmación. Clonar no es necesario si reasignamos.
+  if (confirmBtnEl) {
+    confirmBtnEl.onclick = () => onConfirm(inputEl.value);
+  }
+
+  overlay.classList.add("open");
+  modal.classList.add("open");
+};
+
 const apiFetch = async (url, options = {}) => {
   const method = (options.method || "GET").toUpperCase();
   const headers = {
@@ -431,6 +493,11 @@ window.navigateTo = function (page) {
   if ($("sidebar")) $("sidebar").classList.remove("mobile-open");
 
   // Sincronizar estado de página activa
+  if (typeof window.closePromptModal === "function") {
+    // Asegurarse de que el modal de prompt se cierre al navegar
+    window.closePromptModal();
+  }
+
   if (window.WinnerApp) window.WinnerApp.state.activePage = page;
 
   // Control de visibilidad del botón de consulta flotante
@@ -561,3 +628,12 @@ async function revokeSession(sessionId) {
   }
 }
 window.revokeSession = revokeSession;
+
+window.closePromptModal = function () {
+  const overlay = $("promptModalOverlay");
+  const modal = $("promptModal");
+  if (overlay && modal) {
+    overlay.classList.remove("open");
+    modal.classList.remove("open");
+  }
+};

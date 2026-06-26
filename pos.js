@@ -337,23 +337,27 @@ function renderPOSCart() {
 function editPOSItemPrice(index) {
   const item = window.WinnerApp.pos.cart[index];
   if (!item) return;
-
-  const newPriceRaw = prompt(`Editar precio para:\n${item.name} (Talla: ${item.size})\n\nPrecio actual: ${fmt(item.price)}`, item.price);
   
-  if (newPriceRaw === null) return; // El usuario canceló
-
-  const newPrice = parseFloat(String(newPriceRaw).replace(/[^0-9-]/g, ''));
-
-  if (!isNaN(newPrice) && newPrice >= 0) {
-    // No permitir que el precio editado supere el original
-    if (newPrice > item.originalPrice) {
-      return toast("⚠️ El descuento no puede ser mayor al precio original.");
+  // [FIX] Reemplazar prompt() por un modal personalizado para evitar errores de soporte.
+  // eslint-disable-next-line no-undef
+  openPromptModal(
+    "Editar Precio",
+    `Nuevo precio para: ${item.name} (Talla: ${item.size})`,
+    item.price,
+    (newPriceRaw) => {
+      const newPrice = parseFloat(String(newPriceRaw).replace(/[^0-9-]/g, ""));
+      if (!isNaN(newPrice) && newPrice >= 0) {
+        if (newPrice > item.originalPrice) {
+          return toast("⚠️ El descuento no puede ser mayor al precio original.");
+        }
+        item.price = newPrice; // Actualizar el precio del artículo
+        renderPOSCart();
+        window.closePromptModal(); // Usar la función global
+      } else {
+        toast("❌ Precio inválido.");
+      }
     }
-    item.price = newPrice;
-    renderPOSCart(); // Re-renderizar para mostrar el cambio
-  } else {
-    toast("❌ Precio inválido.");
-  }
+  );
 }
 
 function removeFromPOS(index) {
@@ -514,11 +518,20 @@ async function confirmPOSPaymentWithDetails() {
   if (confirmBtn) confirmBtn.disabled = true;
 
   try {
+    // [FIX] Construcción dinámica de payment_details para evitar enviar campos vacíos
+    // que el backend (Joi) rechaza, como 'tracking_number'.
+    const paymentDetails = {
+      isLayaway: isLayaway,
+      abonoAmount: Math.round(abono),
+      received: Math.round(parseFloat($("posPayCashReceived")?.value) || 0),
+      shipping_status: shippingStatus,
+    };
+
     const sale = {
       id: window.genId(),
       timestamp: window.nowStr(),
-      items: window.WinnerApp.pos.cart,
-      total: total,
+      items: window.WinnerApp.pos.cart, // El precio de cada item ya es un número
+      total: Math.round(total), // [FIX] Enviar como entero
       method: posCurrentPaymentMethod.name,
       payment_method: posCurrentPaymentMethod.name,
       channel: "fisica",
@@ -530,13 +543,7 @@ async function confirmPOSPaymentWithDetails() {
       shipping_address:
         shippingAddress || (isLayaway ? "Apartado en Tienda" : "Venta Directa"),
       shipping_carrier: shippingCarrier || "Físico",
-      // Detalles de pago y envío (fusionados)
-      payment_details: {
-        shipping_status: shippingStatus,
-        isLayaway,
-        abonoAmount: abono, // Corregido: Se elimina la multiplicación por 100
-        received: parseFloat($("posPayCashReceived")?.value) || 0,
-      },
+      payment_details: paymentDetails,
     };
 
     toast("⌛ Procesando...");
@@ -577,6 +584,9 @@ async function confirmPOSPaymentWithDetails() {
       
       // Forzar la recarga de datos y la actualización del dashboard
       await window.fetchSalesLog();
+      // [FIX] Descontar stock después de una venta exitosa para mantener la consistencia del inventario.
+      await window.fetchInventory();
+
       if (typeof window.renderDashboard === "function") window.renderDashboard(); 
     } else {
       const err = await res.json().catch(() => ({}));

@@ -37,7 +37,7 @@ const PAYMENT_METHODS_CONFIG = [
 async function initPaymentsTab() {
   // Si no hay datos de ventas cargados, los traemos para poder mostrar el historial
   if (!window.allSalesData || window.allSalesData.length === 0) {
-    if (typeof fetchSalesLog === "function") await fetchSalesLog();
+    if (typeof window.fetchSalesLog === "function") await window.fetchSalesLog();
   }
 
   renderPaymentMethodsCards();
@@ -113,17 +113,19 @@ window.togglePaymentMethodAdmin = (type, id) => {
   if (method) {
     method.enabled = !method.enabled;
     // Persistir en LocalStorage (core.js lo leerá al recargar)
-    LS.set("payMethods", window.payMethods);
+    window.LS.set("payMethods", window.payMethods);
 
     toast(`${method.name} ${method.enabled ? "activado" : "desactivado"}`);
     renderPaymentMethodsCards();
     // Refrescar el POS si está abierto
-    if (typeof renderPOSProducts === "function") renderPOSProducts();
+    if (typeof window.renderPOSProducts === "function") window.renderPOSProducts();
   }
 };
 
 function syncAndRenderPayments() {
-  const sales = window.allSalesData || [];
+  // [FIX] Usar la fuente de datos centralizada `window.salesLog` en lugar de la obsoleta `window.allSalesData`.
+  // Esto soluciona el problema de los NaN y la tabla de transacciones vacía.
+  const sales = window.salesLog || [];
 
   const channel = $("payFilterChannel")?.value;
   const method = $("payFilterMethod")?.value;

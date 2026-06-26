@@ -252,12 +252,12 @@ function renderSalesTable() {
           <table class="data-table">
             <thead>
               <tr>
-                <th>HORA</th>
-                <th>CANAL</th>
+                <th style="width: 80px;">HORA</th>
                 <th>CLIENTE</th>
-                <th>MÉTODO</th>
-                <th>ESTADO</th>
-                <th>TOTAL</th>
+                <th style="width: 120px;">CANAL / ESTADO</th>
+                <th style="width: 120px;">MÉTODO</th>
+                <th style="width: 120px;">SALDO</th>
+                <th style="width: 120px;">TOTAL</th>
                 <th></th>
               </tr>
             </thead>
@@ -279,28 +279,33 @@ function renderSalesTable() {
                         minute: "2-digit",
                       })
                     : "--";
+                  const paid = s.total_paid || 0;
+                  const balance = s.total - paid;
 
                   return `
                   <tr class="activity-item">
                     <td style="font-size:11px; white-space:nowrap; color:var(--gray-text)">${time}</td>
                     <td>
-                      <div style="display:flex; flex-direction:column; gap:2px;">
-                        <span class="status-badge s-${s.channel}" style="width:fit-content; font-size:9px;">${s.channel === "online" ? "📦 Envío" : "🏪 Física"}</span>
-                        ${s.channel === "online" ? `<span style="font-size:8px; color:var(--gray-text); opacity:0.7;">${shipStatus}</span>` : ""}
-                      </div>
-                    </td>
-                    <td>
                       <div style="font-weight:700; color:white; font-size:13px;">${esc(s.client)}</div>
                       <div style="font-size:10px; color:var(--gray-text);">${s.customer_phone || ""}</div>
                     </td>
+                    <td>
+                      <div style="display:flex; flex-direction:column; gap:2px;">
+                        <span class="status-badge s-${s.channel}" style="width:fit-content; font-size:9px;">${s.channel === "online" ? "📦 Envío" : "🏪 Física"}</span>
+                        <span style="font-size:9px; color:var(--gray-text); opacity:0.7;">${shipStatus}</span>
+                      </div>
+                    </td>
                     <td style="font-size:11px; color:var(--gray-text);">${s.method}</td>
                     <td>
-                      <span class="status-badge ${s.payment_status === "completed" ? "s-ok" : "s-low"}" style="font-size:9px;">${(s.payment_status || "pending").toUpperCase()}</span>
-
+                      ${
+                        s.payment_status === "partial"
+                          ? `<span style="color:var(--orange); font-weight:700;">${fmt(balance)}</span>`
+                          : `<span style="color:var(--gray-text); font-size:11px;">Pagado</span>`
+                      }
                     </td>
                     <td style="color:var(--accent); font-weight:700;">${fmt(s.total)}</td>
                     <td style="text-align:right;">
-                      <button class="action-btn" onclick="viewSaleDetails('${s.id}')">🔗</button>
+                      <button class="action-btn" onclick="viewSaleDetails('${s.id}')" title="Ver detalles y logística">🔗</button>
                     </td>
                   </tr>`;
                 })
@@ -422,14 +427,17 @@ window.applyLogisticsChanges = async (saleId, btn) => {
   btn.textContent = "⌛ Guardando...";
 
   try {
+    const payload = {
+      payment_details: {
+        shipping_status: newStatus,
+      },
+    };
+    if (newTracking) {
+      payload.payment_details.tracking_number = newTracking;
+    }
     const res = await apiFetch(`${API_URL}/sales/${saleId}`, {
       method: "PATCH",
-      body: JSON.stringify({
-        payment_details: {
-          shipping_status: newStatus,
-          tracking_number: newTracking,
-        },
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (res.ok) {
@@ -469,18 +477,19 @@ window.renderLayawaySales = () => {
   const sort = $("layawaySortSelect")?.value || "newest"; 
 
   let filtered = window.salesLog.filter((s) => {
-    // Consideramos como separado cualquier venta física que no esté pagada totalmente (partial/pending)
-    const isPending =
-      s.channel === "fisica" &&
-      (s.payment_status === "partial" || s.payment_status === "pending");
-    const isCompleted =
-      s.channel === "fisica" &&
-      s.payment_status === "completed" &&
-      s.total_paid >= s.total;
+    // [FIX] Validar explícitamente que la venta sea un 'separado' (isLayaway).
+    // Esto evita que las ventas directas (contado) aparezcan en esta lista.
+    let details = s.payment_details || {};
+    if (typeof details === "string") {
+      try { details = JSON.parse(details); } catch (e) { details = {}; }
+    }
+    
+    if (!details.isLayaway) return false; // Si no es un separado, lo descartamos.
 
-    if (window.layawayFilter === "pending") return isPending;
+    const isCompleted = s.payment_status === "completed" || (s.total_paid || 0) >= s.total;
+    if (window.layawayFilter === "pending") return !isCompleted;
     if (window.layawayFilter === "completed") return isCompleted;
-    return isPending || isCompleted;
+    return true; // Para el filtro 'all'
   });
 
   // Ordenamiento
@@ -554,46 +563,55 @@ function updateLayawayKPIs(data) {
 }
 
 window.openLayawayPayment = async (saleId) => {
-  const sale = window.salesLog.find(x => x.id === saleId);
-  if (!sale) return;
+  const sale = window.salesLog.find((x) => x.id === saleId);
+  if (!sale) return toast("❌ Venta no encontrada.");
 
   const currentBalance = sale.total - (sale.total_paid || 0);
-  const amount = prompt(`💸 REGISTRAR ABONO - Orden #${saleId.slice(-6).toUpperCase()}\nSaldo Pendiente: ${fmt(currentBalance)}\n\nIngrese el monto del abono (COP):`, currentBalance);
-  
-  if (amount === null || isNaN(amount) || Number(amount) <= 0) return;
-  try {
-    // The backend expects a more complete payload for PATCH requests.
-    // We'll merge the new payment with existing payment_details.
-    const existingDetails =
-      typeof sale.payment_details === "string"
-        ? JSON.parse(sale.payment_details || "{}")
-        : sale.payment_details || {};
 
-    const res = await apiFetch(`${API_URL}/sales/${saleId}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "x-csrf-token": window.csrfToken,
-      },
-      body: JSON.stringify({
-        total_paid: (sale.total_paid || 0) + Number(amount),
-        payment_details: {
-          ...existingDetails,
-          last_abono: Number(amount),
-          last_abono_date: new Date().toISOString(),
-        },
-      }),
-    });
-    if (res.ok) {
-      toast("✅ Abono registrado");
-      fetchSalesLog(); // Refresca toda la data
-      if (typeof window.renderDashboard === "function") window.renderDashboard(); // ¡NUEVO! Refresca el dashboard
-    } else {
-      toast("❌ Error al registrar abono");
+  // [FIX] Reemplazar prompt() por el modal personalizado para evitar errores de soporte.
+  window.openPromptModal(
+    "Registrar Abono",
+    `Saldo pendiente: ${fmt(currentBalance)}. Ingrese el monto a abonar para la orden #${saleId.slice(-6).toUpperCase()}:`,
+    "", // Dejar en blanco para que el usuario ingrese el monto.
+    async (amountRaw) => { 
+      const amount = parseFloat(amountRaw);
+      if (amount === null || isNaN(amount) || Number(amount) <= 0) {
+        return toast("❌ Monto de abono inválido.");
+      }
+
+      try {
+        const existingDetails = typeof sale.payment_details === "string" ? JSON.parse(sale.payment_details || "{}") : sale.payment_details || {};
+
+        const res = await apiFetch(`${API_URL}/sales/${saleId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            total_paid: (sale.total_paid || 0) + Math.round(amount), // [FIX] Enviar como entero
+            payment_details: {
+              ...existingDetails,
+              last_abono: Number(amount),
+              last_abono_date: new Date().toISOString(),
+            },
+          }),
+        });
+        if (res.ok) {
+          toast("✅ Abono registrado con éxito.");
+          // Actualización manual del estado local para reflejo inmediato en la UI
+          sale.total_paid = (sale.total_paid || 0) + Number(amount);
+          if (sale.total_paid >= sale.total) {
+            sale.payment_status = "completed";
+          }
+          renderLayawaySales(); // Volver a renderizar la tabla de separados
+          window.closePromptModal();
+          // fetchSalesLog(); // Ya no es estrictamente necesario, pero se puede dejar para una sincronización completa
+        } else {
+          const err = await res.json();
+          toast(`❌ Error: ${err.error || "No se pudo registrar el abono."}`);
+        }
+      } catch (e) {
+        toast(`❌ Error de conexión: ${e.message}`);
+      }
     }
-  } catch (e) {
-    toast("❌ Error de red");
-  }
+  );
 };
 
 // Event Listeners

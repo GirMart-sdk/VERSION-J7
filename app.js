@@ -1,44 +1,6 @@
 /* ═══════════════════════════════════════════════════════
-   WINNER STORE — app.js
+   WINNER STORE — app.js (Tienda Pública)
    ═══════════════════════════════════════════════════════ */
-
-// ── CONFIGURACIÓN DINÁMICA DE API ────────────────────────
-// Detecta automáticamente si estamos en localhost o en la IP 192.168.1.8
-window.API_URL = (() => {
-  const origin = window.location.origin;
-  const hostname = window.location.hostname;
-  // Si se abre el archivo localmente (doble click al .html)
-  if (origin.startsWith("file:")) return "http://192.168.1.3:3000/api";
-
-  // Si el hostname incluye "ngrok.io" o "ngrok-free.app", forzamos HTTPS
-  if (hostname.includes("ngrok.io") || hostname.includes("ngrok-free.app")) {
-    return `https://${hostname}/api`;
-  } else {
-    // Si estamos en desarrollo por IP o localhost, normalizamos la URL
-    const base = origin.replace(/\/$/, "");
-    return `${base}/api`;
-  }
-})();
-window.API_KEY = "dev-api-key"; // Key por defecto para desarrollo
-
-// Fallback para apiFetch si core.js no carga
-if (typeof window.apiFetch !== "function") {
-  window.apiFetch = async function (url, options = {}) {
-    const method = (options.method || "GET").toUpperCase();
-    options.headers = options.headers || {};
-    options.headers["x-api-key"] = window.API_KEY;
-
-    if (
-      ["POST", "PUT", "DELETE", "PATCH"].includes(method) &&
-      window.csrfToken
-    ) {
-      options.headers["X-CSRF-Token"] = window.csrfToken;
-    }
-
-    options.credentials = "include";
-    return fetch(url, options);
-  };
-}
 
 /* ── STATE ──────────────────────────────────────────────── */
 window.PRODUCTS = [];
@@ -231,7 +193,7 @@ async function registerOnlineSale(methodName) {
     channel: "online",
     subtotal: subtotal,
     discount: 0,
-    total: total,
+    total: Math.round(total), // [FIX] Enviar como entero
     items: cart.map((i) => ({
       id: i.id,
       productId: i.id,
