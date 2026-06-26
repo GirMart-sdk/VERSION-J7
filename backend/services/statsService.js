@@ -16,10 +16,10 @@ class StatsService {
       prisma.expense.aggregate({ _sum: { amount: true } }),
       // --- CÁLCULO DEL VALOR DEL INVENTARIO ---
       // Consulta que calcula el valor total del inventario basándose en el costo.
-      prisma.$queryRaw`SELECT SUM(i.quantity * p.precio_costo) AS value FROM inventory i JOIN products p ON i.product_id = p.id`,
+      prisma.$queryRaw`SELECT SUM(i.quantity * p."precioCosto") AS value FROM "inventory" i JOIN "products" p ON i."productId" = p.id`,
       // --- CÁLCULO DEL COSTO DE BIENES VENDIDOS (COGS) ---
       // Esto calcula el costo total de los productos que ya se han vendido.
-      prisma.$queryRaw`SELECT SUM(si.quantity * p.precio_costo) AS value FROM "SaleItem" si JOIN products p ON si.product_id = p.id`,
+      prisma.$queryRaw`SELECT SUM(si.quantity * p."precioCosto") AS value FROM "SaleItem" si JOIN "products" p ON si."productId" = p.id`,
       this.getTopProducts(5)
     ]);
 

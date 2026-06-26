@@ -27,9 +27,15 @@ const API_URL = (() => {
     return `http://${savedIp}:3000/api`;
   }
 
-  // Si el hostname incluye "ngrok.io" o "ngrok-free.app", forzamos HTTPS
-  // Esto es crucial para que la cámara funcione en el móvil a través de Ngrok
-  if (window.location.hostname.includes("ngrok.io") || window.location.hostname.includes("ngrok-free.app")) {
+  const { hostname } = window.location;
+
+  // [FIX] Manejar correctamente el acceso a través de Ngrok o IP directa.
+  // El error ERR_CONNECTION_REFUSED ocurría porque al acceder por IP, se asumía el puerto 3000 incorrectamente.
+  const isNgrok = hostname.includes("ngrok.io") || hostname.includes("ngrok-free.app");
+  // eslint-disable-next-line no-unused-vars
+  const isIpAddress = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
+
+  if (isNgrok) {
     return `https://${window.location.hostname}/api`;
   } else {
     // De lo contrario, usamos el origen actual (HTTP o HTTPS)

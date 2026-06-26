@@ -113,49 +113,6 @@ const SalesService = {
   },
 
   /**
-   * Registra un nuevo abono a una venta existente.
-   * Resuelve el error de concatenación asegurando que los valores sean numéricos.
-   * @param {string} saleId - ID de la venta.
-   * @param {Object} paymentData - Datos del pago { amount, method, notes }.
-   */
-  async addPayment(saleId, paymentData) {
-    return await prisma.$transaction(async (tx) => {
-      const sale = await tx.sale.findUnique({ 
-        where: { id: saleId },
-        include: { salePayments: true }
-      });
-      if (!sale) throw new Error("Venta no encontrada");
-
-      // CORRECCIÓN CRÍTICA: Convertir a Number para evitar que "70000" + 30000 resulte en "7000030000"
-      const amountToAdd = Number(paymentData.amount);
-      // Calculamos el total pagado sumando los registros de la relación
-      const currentPaid = sale.salePayments.reduce((sum, p) => sum + Number(p.amount), 0);
-      const nuevoTotalPagado = currentPaid + amountToAdd;
-
-      // 1. Actualizar el estado en la tabla de Ventas (totalPaid no existe en DB)
-      const updatedSale = await tx.sale.update({
-        where: { id: saleId },
-        data: {
-          // Si el total pagado alcanza o supera el monto de la venta, marcar como completado
-          paymentStatus: nuevoTotalPagado >= Number(sale.totalAmount) ? "completed" : "partial"
-        }
-      });
-
-      // 2. Crear el registro histórico en la tabla de pagos individuales
-      await tx.salePayment.create({
-        data: {
-          saleId: sale.id,
-          amount: amountToAdd,
-          method: paymentData.method || "Efectivo",
-          notes: paymentData.notes || "Abono registrado desde el panel administrativo",
-        },
-      });
-
-      return updatedSale;
-    });
-  },
-
-  /**
    * Actualiza el estado de logística (detalles de envío) de una venta.
    * @param {string} saleId - ID de la venta.
    * @param {Object} payload - Datos de logística { shipping_status, tracking_number, ... }.

@@ -1,105 +1,67 @@
 "use strict";
 
-const express = require("express");
-const { prisma } = require("../database");
-const { requireAuth } = require("../middlewares/auth");
-const asyncHandler = require("../utils/asyncHandler");
-
+const express = require('express');
 const router = express.Router();
+const { requireAuth } = require('../middlewares/auth');
+const asyncHandler = require('../utils/asyncHandler');
+const { prisma } = require('../database');
+const ReportService = require('../services/reportService');
 
 /**
- * GET /api/arqueo/status
- * Retorna la sesión de caja abierta actualmente y los cálculos en tiempo real.
+ * Endpoint para descargar el reporte de cierre de caja en formato PDF.
+ * Al acceder a esta URL, el navegador iniciará la descarga del archivo.
  */
-router.get("/arqueo/status", requireAuth, asyncHandler(async (req, res) => {
-  const activeSession = await prisma.cashSession.findFirst({
-    where: { status: "OPEN" },
-    orderBy: { openedAt: "desc" },
-  });
+router.get('/download-report/:sessionId', requireAuth, asyncHandler(async (req, res) => {
+    const { sessionId } = req.params;
 
-  if (!activeSession) {
-    return res.json({ active: false });
-  }
+    // 1. Obtener los datos necesarios para el reporte desde la base de datos.
+    const session = await prisma.cashSession.findUnique({
+        where: { id: sessionId },
+    });
 
-  // Calcular ventas y gastos en EFECTIVO desde la apertura para el saldo teórico
-  const [sales, expenses] = await Promise.all([
-    prisma.sale.aggregate({
-      where: {
-        createdAt: { gte: activeSession.openedAt },
-        deletedAt: null,
-        paymentMethod: { contains: "Efectivo", mode: "insensitive" }
-      },
-      _sum: { totalAmount: true }
-    }),
-    prisma.expense.aggregate({
-      where: {
-        createdAt: { gte: activeSession.openedAt },
-        method: { contains: "Efectivo", mode: "insensitive" }
-      },
-      _sum: { amount: true }
-    })
-  ]);
-
-  const theoreticalSales = Number(sales._sum.totalAmount || 0);
-  const theoreticalExpenses = Number(expenses._sum.amount || 0);
-  const theoreticalBalance = Number(activeSession.initialBalance) + theoreticalSales - theoreticalExpenses;
-
-  res.json({
-    active: true,
-    session: activeSession,
-    calculations: {
-      theoreticalSales,
-      theoreticalExpenses,
-      theoreticalBalance
+    if (!session) {
+        return res.status(404).json({ error: 'Sesión no encontrada.' });
     }
-  });
+
+    // Obtener las ventas y gastos asociados a esta sesión.
+    const sales = await prisma.sale.findMany({
+        where: {
+            createdAt: {
+                gte: session.openedAt,
+                lte: session.closedAt || new Date(),
+            },
+        },
+    });
+
+    const expenses = await prisma.expense.findMany({
+        where: {
+            createdAt: {
+                gte: session.openedAt,
+                lte: session.closedAt || new Date(),
+            },
+        },
+    });
+
+    // 2. Generar el PDF usando el servicio de reportes.
+    const pdfBuffer = await ReportService.generateCashClosingPDF(session, sales, expenses);
+
+    // 3. Configurar las cabeceras HTTP para forzar la descarga en el navegador.
+    const filename = `cierre-caja-${sessionId}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // 4. Enviar el PDF como respuesta.
+    res.send(pdfBuffer);
 }));
 
-/**
- * POST /api/arqueo/open
- * Inicia un nuevo turno de caja.
- */
-router.post("/arqueo/open", requireAuth, asyncHandler(async (req, res) => {
-  const { initialBalance, notes } = req.body;
-
-  const existing = await prisma.cashSession.findFirst({ where: { status: "OPEN" } });
-  if (existing) return res.status(400).json({ error: "Ya hay un turno de caja abierto" });
-
-  const session = await prisma.cashSession.create({
-    data: {
-      id: "CASH-" + Date.now().toString(36).toUpperCase(),
-      openedBy: req.user.user, // Tomado del token JWT
-      initialBalance: Number(initialBalance) || 0,
-      status: "OPEN",
-      notes: notes || ""
-    }
-  });
-
-  res.json({ success: true, session });
-}));
-
-/**
- * POST /api/arqueo/close
- * Finaliza el turno actual y registra la diferencia (sobrante/faltante).
- */
-router.post("/arqueo/close", requireAuth, asyncHandler(async (req, res) => {
-  const { realBalance, notes } = req.body;
-
-  const activeSession = await prisma.cashSession.findFirst({ where: { status: "OPEN" } });
-  if (!activeSession) return res.status(400).json({ error: "No hay una sesión activa para cerrar" });
-
-  await prisma.cashSession.update({
-    where: { id: activeSession.id },
-    data: {
-      closedAt: new Date(),
-      closedBy: req.user.user,
-      realBalance: Number(realBalance),
-      status: "CLOSED",
-      notes: notes || activeSession.notes
-    }
-  });
-
-  res.json({ success: true, message: "Caja cerrada correctamente" });
-}));
+// Aquí irían las otras rutas relacionadas con el arqueo, como la de enviar por email.
+// Por ejemplo: router.post('/send-report', ...);
 
 module.exports = router;
+
+/*
+   NOTA PARA EL DESARROLLADOR:
+   Para que esta ruta funcione, regístrala en tu archivo principal del servidor (server.js o app.js):
+   const arqueoRoutes = require('./routes/arqueo');
+   app.use('/api/arqueo', arqueoRoutes);
+*/

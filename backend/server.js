@@ -182,7 +182,7 @@ app.use("/api", requireAuth, requireAdminIp);
 app.use("/api", productsRoutes); // Montar productsRoutes directamente bajo /api
 app.use("/api", salesRoutes);
 app.use("/api", expensesRoutes);
-app.use("/api", arqueoRoutes);
+app.use("/api/arqueo", arqueoRoutes); // CORRECCIÓN: Montar bajo /api/arqueo
 app.use("/api", webhookRoutes);
 app.use("/api", statsRoutes);
 

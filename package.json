@@ -77,12 +77,14 @@
   },
   "devDependencies": {
     "@prisma/config": "^6.19.3",
+    "axios-cookiejar-support": "^7.0.0",
     "concurrently": "^10.0.3",
     "cross-env": "^7.0.3",
     "eslint": "^8.57.0",
     "eslint-plugin-security": "^2.1.1",
     "prisma": "^6.19.3",
     "rimraf": "^5.0.10",
+    "tough-cookie": "^6.0.1",
     "watch": "^0.13.0"
   },
   "repository": {

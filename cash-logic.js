@@ -156,21 +156,16 @@ async function confirmCloseCash() {
         sessions[idx].endTime = new Date().toISOString();
         saveSessions(sessions);
 
-        // Enviar reporte al cerrar turno (PDF al Email) solo si está seleccionado
-        if ((shouldEmail || shouldDownload) && typeof window.handleSendDailyReport === 'function') {
-            // La función ahora puede devolver el PDF para descargarlo
-            const pdfBlob = await window.handleSendDailyReport(sessionToClose.id, !shouldEmail);
-
-            if (shouldDownload && pdfBlob) {
-                const url = URL.createObjectURL(pdfBlob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `Reporte-Caja-${sessionToClose.id}.pdf`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                a.remove();
-            }
+        // SOLUCIÓN: Lógica de descarga y envío de email separada y corregida.
+        if (shouldDownload) {
+            // Llama directamente al nuevo endpoint de descarga.
+            // El navegador se encargará de descargar el archivo.
+            window.open(`/api/arqueo/download-report/${sessionToClose.id}`);
+            toast("📄 Iniciando descarga del reporte...");
+        }
+        if (shouldEmail && typeof window.handleSendDailyReport === 'function') {
+            // La función original ahora solo se encarga de enviar el email.
+            await window.handleSendDailyReport(sessionToClose.id);
         }
         if (shouldPrint) {
             // Placeholder para la lógica de impresión térmica
