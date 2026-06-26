@@ -61,9 +61,7 @@ function renderSalesKPIs() {
   if ($("kpiPhysicalPercent"))
     $("kpiPhysicalPercent").innerText = `${(100 - onlinePercent).toFixed(0)}%`;
 
-  // SOLUCIÓN: Calcular y renderizar el KPI de deudas pendientes en el dashboard.
-  const pendingAmount = window.salesLog.filter(s => s.payment_status === 'partial').reduce((sum, s) => sum + (s.total - (s.total_paid || 0)), 0);
-  if ($("kpiPendingAmount")) $("kpiPendingAmount").innerText = fmt(pendingAmount);
+  // La actualización de KPIs de deuda ahora se centraliza en updateGlobalPendingKPIs
 }
 
 function renderSalesCharts() {
@@ -608,20 +606,30 @@ window.renderLayawaySales = () => {
     .join("");
 
   updateLayawayKPIs(filtered);
+  // Llamada a la función centralizada para asegurar que el dashboard también se actualice.
+  updateGlobalPendingKPIs();
 };
 
 function updateLayawayKPIs(data) {
   const totalSales = data.length;
   const totalCollected = data.reduce((sum, s) => sum + (s.total_paid || 0), 0);
-  const totalPending = data.reduce(
-    (sum, s) => sum + (s.total - (s.total_paid || 0)),
-    0,
-  );
 
   if ($("sepTotalSales")) $("sepTotalSales").innerText = totalSales;
   if ($("sepTotalCollected"))
     $("sepTotalCollected").innerText = fmt(totalCollected);
-  if ($("sepTotalPending")) $("sepTotalPending").innerText = fmt(totalPending);
+  
+  // La actualización del total pendiente ahora se delega a la función global.
+  updateGlobalPendingKPIs();
+}
+
+/**
+ * SOLUCIÓN: Función centralizada para calcular y actualizar TODOS los KPIs de deuda.
+ * Esta es ahora la única fuente de verdad para el saldo pendiente.
+ */
+function updateGlobalPendingKPIs() {
+  const totalPending = (window.salesLog || []).filter(s => s.payment_status === 'partial').reduce((sum, s) => sum + (s.total - (s.total_paid || 0)), 0);
+  if ($("kpiPendingAmount")) $("kpiPendingAmount").innerText = fmt(totalPending); // KPI del Dashboard
+  if ($("sepTotalPending")) $("sepTotalPending").innerText = fmt(totalPending);  // KPI de Cuentas por Cobrar
 }
 
 window.openLayawayPayment = async (saleId) => {
