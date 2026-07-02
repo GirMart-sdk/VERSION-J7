@@ -86,6 +86,7 @@ const arqueoRoutes = require("./routes/arqueo");
 const deudasRoutes = require("./routes/deudas");
 const webhookRoutes = require("./routes/webhooks");
 const statsRoutes = require("./routes/stats");
+const storageRoutes = require("./routes/storage");
 
 // 3. Middlewares Globales
 app.use(helmet({
@@ -171,6 +172,10 @@ app.get("/api/get-csrf", (req, res) => {
   res.json({ csrfToken: RUNTIME_CSRF_SECRET }); // Devolver el secreto dinámico
 });
 
+// 3.6. Servir archivos estáticos de la carpeta de subidas
+// Debe ir antes de las rutas de la API para que funcione correctamente.
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
 
 // Authentication routes (login, logout, forgot-password)
 // These should not be IP whitelisted, as an admin might need to log in from a new IP
@@ -187,6 +192,7 @@ app.use("/api/deudas", deudasRoutes);
 app.use("/api/arqueo", arqueoRoutes); // CORRECCIÓN: Montar bajo /api/arqueo
 app.use("/api", webhookRoutes);
 app.use("/api", statsRoutes);
+app.use("/api/storage", storageRoutes);
 
 // Endpoint de "Reinicio Total"
 app.post("/api/admin/reset-data", requireAuth, requireAdminIp, async (req, res, next) => {
@@ -241,7 +247,6 @@ app.use((req, res, next) => {
 // 5. Archivos estáticos
 const rootPath = path.join(__dirname, "..");
 app.use(express.static(rootPath));
-app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 
 // 6. Rutas de salud y diagnóstico
 app.get("/api/health", requireAuth, requireAdminIp, async (req, res) => {

@@ -1,1 +1,1 @@
-localStorage.setItem("w_server_ip", "192.168.1.16");
+localStorage.setItem("w_server_ip", "192.168.1.11");
